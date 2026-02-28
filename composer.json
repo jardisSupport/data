@@ -1,7 +1,6 @@
 {
   "name": "jardissupport/data",
   "description": "Entity Data Service for PHP - Hydration, Change Tracking, Snapshots",
-  "version": "1.0.0",
   "type": "library",
   "license": "PolyForm-Noncommercial-1.0.0",
   "minimum-stability": "stable",
