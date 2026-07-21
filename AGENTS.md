@@ -1,6 +1,6 @@
 # jardissupport/data
 
-Entity hydration, change tracking, deep clone, field mapping, identity generation — all reflection-based, no ORM. Three service classes: `Hydration`, `Identity`, `FieldMapper` implement Contracts from `jardissupport/contract`.
+Entity hydration, change tracking, deep clone, field mapping, identity generation — all reflection-based, no ORM. Three service classes: `Hydration`, `Identity`, `FieldMapper` implement Contracts from `jardissupport/contracts`.
 
 ## Usage essentials
 

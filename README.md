@@ -80,7 +80,7 @@ $fields = $mapper->fromColumns(['name' => 'Müller'], $map);
 
 ## Interfaces
 
-All three services implement port interfaces from `jardissupport/contract`:
+All three services implement port interfaces from `jardissupport/contracts`:
 
 | Service | Interface | Purpose |
 |---------|-----------|---------|
