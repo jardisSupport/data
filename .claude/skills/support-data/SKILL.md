@@ -11,20 +11,6 @@ next: [support-repository]
 # DATA_COMPONENT_SKILL
 > jardissupport/data | NS: `JardisSupport\Data` | PHP 8.2+
 
-## ARCHITECTURE
-```
-Hydration (implements HydrationInterface)
-  Handlers: HydrateEntity · HydrateAggregate · DetectChanges · CloneEntity · CloneAggregate
-            DiffEntities · EntityToArray · AggregateToArray · LoadMultiple
-  Helpers:  SetPropertyValue · GetPropertyValue · ColumnNameToPropertyName · PropertyNameToColumnName
-            SetSnapshot · GetSnapshot · TypeCaster · ToSnapshotValue
-
-Identity (implements IdentityInterface)
-  Handlers: GenerateUuid4 · GenerateUuid5 · GenerateUuid7 · GenerateNanoId
-
-FieldMapper (implements FieldMapperInterface)
-  Methods:  toColumns · fromColumns · fromAggregate
-```
 **Entity requirement:** `private array $__snapshot = [];`. Getter priority: `get*()` > `is*()` > `has*()` > reflection.
 
 ## API
@@ -78,8 +64,6 @@ $fm->fromAggregate(array $data, callable $mapProvider, string $entity): array
 | Typical caller | Repository (DB load) | AggregateHandler (Set/Add) |
 | Type Casting | Yes | Yes |
 
-Both use `HydrateEntity` internally — `apply()` passes `updateSnapshot: false`.
-
 ## VALUE-BASED DETECTION (no `#[Relation]` attribute needed)
 - **DB column:** `null`, scalar, `DateTimeInterface`, `BackedEnum`, plain scalar arrays
 - **Relation:** objects, arrays of objects
@@ -110,7 +94,7 @@ MANY relations: adder `add{Singular}()` param type → `@var ClassName[]` / `@va
 ONE relations: property type hint. Numeric array keys (collection indices) skipped.
 
 ## UUID DETAILS
-- **v7** (recommended): 48-bit ms timestamp + 12-bit monotonic counter + 62-bit random. Counter starts at random offset per ms (cross-instance collision avoidance). Lexicographically sortable.
+- **v7** (recommended): time-ordered, RFC 9562. Lexicographically sortable.
 - **v5**: deterministic — same namespace+name = same UUID. Use for stable identities from business data.
 - **NanoID**: default 21 chars ~126 bits entropy, configurable alphabet+length.
 - **Convention:** Aggregate `identifier` = UUID v7 `CHAR(36)` UNIQUE (external/API). PK = autoincrement INT (internal/FK).
