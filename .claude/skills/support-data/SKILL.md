@@ -72,7 +72,8 @@ $fm->fromAggregate(array $data, callable $mapProvider, string $entity): array
 - Class property + array value → skip (ONE-relation)
 
 ## TYPE CASTING
-`TypeCaster`: `string` → `DateTime`|`DateTimeImmutable` (formats: `Y-m-d H:i:s` | `Y-m-d` | `H:i:s`) · `int` · `bool` (`(bool)((int)$v)`) · `float` · `BackedEnum::from($v)`.
+`TypeCaster`: `string` → `DateTime`|`DateTimeImmutable` (formats: `Y-m-d H:i:s` | `Y-m-d` | `H:i:s`, then **fallback `new DateTime($v)`** since v1.1.0 — so Postgres `TIMESTAMPTZ` `2026-08-28 12:34:56.123456+00`, ISO-8601 `…T12:34:56Z`, offsets like `+05:30` parse; unparseable → `null`) · `int` · `bool` (`(bool)((int)$v)`) · `float` · `BackedEnum::from($v)`.
+- **< v1.1.0:** TIMESTAMPTZ with microseconds/offset returned `null` silently ("Trailing data") — map such rows manually there.
 - Date-only `Y-m-d`: time reset to `00:00:00`
 - Time-only `H:i:s`: date reset to `1970-01-01`
 - Null + untyped properties: unchanged
