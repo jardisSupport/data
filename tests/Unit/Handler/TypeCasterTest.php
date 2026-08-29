@@ -344,4 +344,122 @@ class TypeCasterTest extends TestCase
         $this->assertInstanceOf(DateTimeImmutable::class, $result);
         $this->assertEquals('2024-01-15 14:30:45', $result->format('Y-m-d H:i:s'));
     }
+
+    public function testParsesDateTimeFromOffsetWithoutMicroseconds(): void
+    {
+        $entity = new class {
+            private DateTime $createdAt;
+        };
+        $property = new ReflectionProperty($entity, 'createdAt');
+
+        $result = $this->typeCaster->__invoke('2026-08-28 12:34:56+02', $property);
+
+        $this->assertInstanceOf(DateTime::class, $result);
+        $this->assertEquals('2026-08-28 12:34:56', $result->format('Y-m-d H:i:s'));
+        $this->assertEquals(7200, $result->getOffset());
+    }
+
+    public function testParsesDateTimeFromMicrosecondsWithoutOffset(): void
+    {
+        $entity = new class {
+            private DateTime $createdAt;
+        };
+        $property = new ReflectionProperty($entity, 'createdAt');
+
+        $result = $this->typeCaster->__invoke('2026-08-28 12:34:56.123456', $property);
+
+        $this->assertInstanceOf(DateTime::class, $result);
+        $this->assertEquals('123456', $result->format('u'));
+    }
+
+    public function testParsesDateTimeFromPostgresTimestamptzForm(): void
+    {
+        $entity = new class {
+            private DateTime $createdAt;
+        };
+        $property = new ReflectionProperty($entity, 'createdAt');
+
+        $result = $this->typeCaster->__invoke('2026-08-28 12:34:56.123456+00', $property);
+
+        $this->assertInstanceOf(DateTime::class, $result);
+        $this->assertEquals(0, $result->getOffset());
+        $this->assertEquals('123456', $result->format('u'));
+
+        $result2 = $this->typeCaster->__invoke('2026-08-28 12:34:56.5+05:30', $property);
+
+        $this->assertInstanceOf(DateTime::class, $result2);
+        $this->assertEquals(19800, $result2->getOffset());
+    }
+
+    public function testParsesDateTimeFromIso8601String(): void
+    {
+        $entity = new class {
+            private DateTime $createdAt;
+        };
+        $property = new ReflectionProperty($entity, 'createdAt');
+
+        $result = $this->typeCaster->__invoke('2026-08-28T12:34:56Z', $property);
+
+        $this->assertInstanceOf(DateTime::class, $result);
+        $this->assertEquals(0, $result->getOffset());
+    }
+
+    public function testParsesDateTimeImmutableFromOffsetWithoutMicroseconds(): void
+    {
+        $entity = new class {
+            private DateTimeImmutable $createdAt;
+        };
+        $property = new ReflectionProperty($entity, 'createdAt');
+
+        $result = $this->typeCaster->__invoke('2026-08-28 12:34:56+02', $property);
+
+        $this->assertInstanceOf(DateTimeImmutable::class, $result);
+        $this->assertEquals('2026-08-28 12:34:56', $result->format('Y-m-d H:i:s'));
+        $this->assertEquals(7200, $result->getOffset());
+    }
+
+    public function testParsesDateTimeImmutableFromMicrosecondsWithoutOffset(): void
+    {
+        $entity = new class {
+            private DateTimeImmutable $createdAt;
+        };
+        $property = new ReflectionProperty($entity, 'createdAt');
+
+        $result = $this->typeCaster->__invoke('2026-08-28 12:34:56.123456', $property);
+
+        $this->assertInstanceOf(DateTimeImmutable::class, $result);
+        $this->assertEquals('123456', $result->format('u'));
+    }
+
+    public function testParsesDateTimeImmutableFromPostgresTimestamptzForm(): void
+    {
+        $entity = new class {
+            private DateTimeImmutable $createdAt;
+        };
+        $property = new ReflectionProperty($entity, 'createdAt');
+
+        $result = $this->typeCaster->__invoke('2026-08-28 12:34:56.123456+00', $property);
+
+        $this->assertInstanceOf(DateTimeImmutable::class, $result);
+        $this->assertEquals(0, $result->getOffset());
+        $this->assertEquals('123456', $result->format('u'));
+
+        $result2 = $this->typeCaster->__invoke('2026-08-28 12:34:56.5+05:30', $property);
+
+        $this->assertInstanceOf(DateTimeImmutable::class, $result2);
+        $this->assertEquals(19800, $result2->getOffset());
+    }
+
+    public function testParsesDateTimeImmutableFromIso8601String(): void
+    {
+        $entity = new class {
+            private DateTimeImmutable $createdAt;
+        };
+        $property = new ReflectionProperty($entity, 'createdAt');
+
+        $result = $this->typeCaster->__invoke('2026-08-28T12:34:56Z', $property);
+
+        $this->assertInstanceOf(DateTimeImmutable::class, $result);
+        $this->assertEquals(0, $result->getOffset());
+    }
 }
