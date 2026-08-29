@@ -14,8 +14,10 @@ use ReflectionProperty;
  * Type-casts values based on property type hints.
  *
  * Handles conversion from database values to PHP types:
- * - String → DateTime (supports Y-m-d H:i:s, Y-m-d, H:i:s formats)
- * - String → DateTimeImmutable
+ * - String → DateTime (supports Y-m-d H:i:s, Y-m-d, H:i:s formats, with a
+ *   fallback to the general PHP date parser for everything else — e.g.
+ *   Postgres TIMESTAMPTZ with offset/microseconds, ISO-8601)
+ * - String → DateTimeImmutable (same formats + fallback)
  * - String → int/bool/float
  * - String → BackedEnum (via ::from())
  *
@@ -97,7 +99,11 @@ class TypeCaster
             return $result;
         }
 
-        return null;
+        try {
+            return new DateTime($value);
+        } catch (\Exception) {
+            return null;
+        }
     }
 
     /**
@@ -135,6 +141,10 @@ class TypeCaster
             return $result;
         }
 
-        return null;
+        try {
+            return new DateTimeImmutable($value);
+        } catch (\Exception) {
+            return null;
+        }
     }
 }

@@ -24,7 +24,7 @@ Three focused services for entity hydration and DTO mapping in PHP: **Hydration*
 - **Field Mapping** — `toColumns()` and `fromColumns()` rename array keys between domain and database names using an explicit map; `fromAggregate()` maps hierarchical arrays with per-entity mappings and filters unmapped keys
 - **Identity Generation** — UUID v4 (random), v5 (deterministic), v7 (time-ordered with monotonic counter), and NanoID (compact, URL-safe)
 - **PHP Attributes** — `#[Table]`, `#[Column]`, `#[PrimaryKey]`, `#[Aggregate]` for entity metadata
-- **TypeCaster** — automatic DB-to-PHP type conversion (int, bool, float, DateTime, DateTimeImmutable, BackedEnum)
+- **TypeCaster** — automatic DB-to-PHP type conversion (int, bool, float, DateTime, DateTimeImmutable, BackedEnum); DateTime/DateTimeImmutable fall back to PHP's general date parser for anything beyond the three fixed formats, so TIMESTAMPTZ/ISO-8601 strings with offset and/or microseconds (e.g. `2026-08-28 12:34:56.123456+00`, `2026-08-28T12:34:56Z`) parse correctly instead of silently returning `null`
 
 ---
 
