@@ -4,7 +4,7 @@ description: Entity hydration, change tracking, field mapping, UUID/NanoID gener
 user-invocable: false
 zone: post-active
 persona: C
-prerequisites: [rules-architecture, rules-patterns]
+prerequisites: [foundation-architecture, foundation-patterns]
 next: [support-repository]
 ---
 
