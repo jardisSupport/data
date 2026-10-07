@@ -166,6 +166,28 @@ class TypeCasterTest extends TestCase
         $this->assertNull($result);
     }
 
+    public function testReturnsNullForZeroDateDateTime(): void
+    {
+        $entity = new class {
+            private ?DateTime $createdAt = null;
+        };
+        $property = new ReflectionProperty($entity, 'createdAt');
+
+        $this->assertNull($this->typeCaster->__invoke('0000-00-00 00:00:00', $property));
+        $this->assertNull($this->typeCaster->__invoke('0000-00-00', $property));
+    }
+
+    public function testReturnsNullForZeroDateDateTimeImmutable(): void
+    {
+        $entity = new class {
+            private ?DateTimeImmutable $createdAt = null;
+        };
+        $property = new ReflectionProperty($entity, 'createdAt');
+
+        $this->assertNull($this->typeCaster->__invoke('0000-00-00 00:00:00', $property));
+        $this->assertNull($this->typeCaster->__invoke('0000-00-00', $property));
+    }
+
     public function testReturnsNullForEmptyDateTimeString(): void
     {
         $entity = new class {

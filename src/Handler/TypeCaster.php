@@ -84,6 +84,11 @@ class TypeCaster
             return null;
         }
 
+        // Zero-dates (MySQL) must not overflow into a bogus date like -0001-11-30
+        if (str_starts_with(trim($value), '0000-00-00')) {
+            return null;
+        }
+
         $result = DateTime::createFromFormat('Y-m-d H:i:s', $value);
         if ($result !== false) {
             return $result;
@@ -123,6 +128,11 @@ class TypeCaster
         }
 
         if (!is_string($value) || empty($value)) {
+            return null;
+        }
+
+        // Zero-dates (MySQL) must not overflow into a bogus date like -0001-11-30
+        if (str_starts_with(trim($value), '0000-00-00')) {
             return null;
         }
 
