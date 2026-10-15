@@ -19,17 +19,24 @@ class FieldMapper implements FieldMapperInterface
      *
      * @param array<string, mixed> $data Input with domain field names as keys
      * @param array<string, string> $map Domain-to-column mapping
+     * @param array<int, string> $skipNullColumns Column names whose `null` value is omitted from the result
+     *                                            (other keys, including other `null` values, are kept)
      * @return array<string, mixed> Output with column names as keys
      */
-    public function toColumns(array $data, array $map): array
+    public function toColumns(array $data, array $map, array $skipNullColumns = []): array
     {
-        if ($map === []) {
+        if ($map === [] && $skipNullColumns === []) {
             return $data;
         }
 
+        $skip = array_flip($skipNullColumns);
         $result = [];
         foreach ($data as $key => $value) {
-            $result[$map[$key] ?? $key] = $value;
+            $column = $map[$key] ?? $key;
+            if ($value === null && isset($skip[$column])) {
+                continue;
+            }
+            $result[$column] = $value;
         }
 
         return $result;

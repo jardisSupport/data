@@ -62,6 +62,69 @@ class FieldMapperTest extends TestCase
         $this->assertSame([], $result);
     }
 
+    // --- toColumns: skipNullColumns ---
+
+    public function testToColumnsSkipsNullForColumnInSkipList(): void
+    {
+        $input = ['customerName' => 'Müller', 'passwordHash' => null, 'orderNumber' => 'O-1'];
+        $map = $this->map + ['passwordHash' => 'password_hash'];
+
+        $result = $this->fieldMapper->toColumns($input, $map, ['password_hash']);
+
+        $this->assertSame(['name' => 'Müller', 'order_number' => 'O-1'], $result);
+    }
+
+    public function testToColumnsKeepsValueForColumnInSkipList(): void
+    {
+        $input = ['customerName' => 'Müller', 'passwordHash' => 'hash'];
+        $map = $this->map + ['passwordHash' => 'password_hash'];
+
+        $result = $this->fieldMapper->toColumns($input, $map, ['password_hash']);
+
+        $this->assertSame(['name' => 'Müller', 'password_hash' => 'hash'], $result);
+    }
+
+    public function testToColumnsKeepsNullForColumnNotInSkipList(): void
+    {
+        $input = ['customerName' => null, 'passwordHash' => null];
+        $map = $this->map + ['passwordHash' => 'password_hash'];
+
+        $result = $this->fieldMapper->toColumns($input, $map, ['password_hash']);
+
+        $this->assertSame(['name' => null], $result);
+    }
+
+    public function testToColumnsSkipListMatchesColumnNameNotDomainName(): void
+    {
+        $input = ['passwordHash' => null];
+        $map = ['passwordHash' => 'password_hash'];
+
+        $result = $this->fieldMapper->toColumns($input, $map, ['passwordHash']);
+
+        $this->assertSame(['password_hash' => null], $result);
+    }
+
+    public function testToColumnsSkipListWorksWithEmptyMap(): void
+    {
+        $result = $this->fieldMapper->toColumns(['a' => null, 'b' => null, 'c' => 1], [], ['a']);
+
+        $this->assertSame(['b' => null, 'c' => 1], $result);
+    }
+
+    public function testToColumnsEmptySkipListIsIdenticalToTwoArgumentCall(): void
+    {
+        $input = ['customerName' => null, 'orderNumber' => 'O-1', 'email' => null];
+
+        $this->assertSame(
+            $this->fieldMapper->toColumns($input, $this->map),
+            $this->fieldMapper->toColumns($input, $this->map, [])
+        );
+        $this->assertSame(
+            ['name' => null, 'order_number' => 'O-1', 'email' => null],
+            $this->fieldMapper->toColumns($input, $this->map, [])
+        );
+    }
+
     // --- fromColumns ---
 
     public function testFromColumnsRenamesKeys(): void
