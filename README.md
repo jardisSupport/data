@@ -87,6 +87,27 @@ $fields = $mapper->fromColumns(['name' => 'Müller'], $map);
 // ['customerName' => 'Müller']
 ```
 
+## Write-only columns: skip null
+
+A column that must never be overwritten with `null` — typically a password hash on update, where the
+caller leaves the field empty to keep the stored value — is declared by the caller as a skip list.
+The package does not know where the list comes from; it only skips `null` for the named entries.
+
+```php
+// Column names are matched after mapping; other keys (and other nulls) pass through unchanged.
+$row = $mapper->toColumns(
+    ['name' => 'Jane', 'passwordHash' => null],
+    ['passwordHash' => 'password_hash'],
+    ['password_hash'],
+);
+// ['name' => 'Jane']                  — password_hash is not written
+
+// Same idea on the entity side: keys of $data, `null` is not written, the field stays untouched.
+$hydration->apply($user, ['first_name' => 'John', 'password_hash' => null], ['password_hash']);
+```
+
+An empty list (the default) keeps the previous behaviour byte-for-byte.
+
 ## Interfaces
 
 All three services implement port interfaces from `jardissupport/contracts`:
