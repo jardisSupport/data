@@ -69,10 +69,21 @@ class Hydration implements HydrationInterface
      * @template T of object
      * @param T $entity
      * @param array<string, mixed> $data
+     * @param array<int, string> $skipNullKeys Keys of $data whose `null` value is not written
+     *                                         (the field stays untouched); all other keys are written as before
      * @return T
      */
-    public function apply(object $entity, array $data): object
+    public function apply(object $entity, array $data, array $skipNullKeys = []): object
     {
+        if ($skipNullKeys !== []) {
+            $skip = array_flip($skipNullKeys);
+            $data = array_filter(
+                $data,
+                static fn(mixed $value, string|int $key): bool => $value !== null || !isset($skip[$key]),
+                ARRAY_FILTER_USE_BOTH
+            );
+        }
+
         ($this->getHydrateEntity())($entity, $data, false);
         return $entity;
     }

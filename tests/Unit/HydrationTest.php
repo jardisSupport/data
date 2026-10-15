@@ -415,6 +415,72 @@ class HydrationTest extends TestCase
         $this->assertArrayNotHasKey('email', $changes);
     }
 
+    public function testApplySkipsNullForKeyInSkipList(): void
+    {
+        $entity = $this->skipEntity();
+        $this->hydration->hydrate($entity, ['id' => 1, 'name' => 'John', 'password_hash' => 'secret']);
+
+        $this->hydration->apply($entity, ['name' => 'Jane', 'password_hash' => null], ['password_hash']);
+
+        $this->assertSame('Jane', $entity->getName());
+        $this->assertSame('secret', $entity->getPasswordHash());
+        $this->assertSame(['name' => 'Jane'], $this->hydration->getChanges($entity));
+    }
+
+    public function testApplyWritesValueForKeyInSkipList(): void
+    {
+        $entity = $this->skipEntity();
+        $this->hydration->hydrate($entity, ['id' => 1, 'name' => 'John', 'password_hash' => 'secret']);
+
+        $this->hydration->apply($entity, ['password_hash' => 'new'], ['password_hash']);
+
+        $this->assertSame('new', $entity->getPasswordHash());
+        $this->assertSame(['password_hash' => 'new'], $this->hydration->getChanges($entity));
+    }
+
+    public function testApplyWritesNullForKeyNotInSkipList(): void
+    {
+        $entity = $this->skipEntity();
+        $this->hydration->hydrate($entity, ['id' => 1, 'name' => 'John', 'password_hash' => 'secret']);
+
+        $this->hydration->apply($entity, ['name' => null, 'password_hash' => null], ['password_hash']);
+
+        $this->assertNull($entity->getName());
+        $this->assertSame('secret', $entity->getPasswordHash());
+        $this->assertArrayHasKey('name', $this->hydration->getChanges($entity));
+    }
+
+    public function testApplyWithEmptySkipListWritesNullLikeBefore(): void
+    {
+        $entity = $this->skipEntity();
+        $this->hydration->hydrate($entity, ['id' => 1, 'name' => 'John', 'password_hash' => 'secret']);
+
+        $this->hydration->apply($entity, ['password_hash' => null], []);
+
+        $this->assertNull($entity->getPasswordHash());
+        $this->assertSame(['password_hash' => null], $this->hydration->getChanges($entity));
+    }
+
+    private function skipEntity(): object
+    {
+        return new class {
+            private ?int $id = null;
+            private ?string $name = null;
+            private ?string $passwordHash = null;
+            private array $__snapshot = [];
+
+            public function getName(): ?string
+            {
+                return $this->name;
+            }
+
+            public function getPasswordHash(): ?string
+            {
+                return $this->passwordHash;
+            }
+        };
+    }
+
     public function testApplyWithTypeCasting(): void
     {
         $entity = new class {
