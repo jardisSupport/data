@@ -56,22 +56,51 @@ class ProjectWireTest extends TestCase
     }
 
     // Zusage 3
-    public function testDateTimeObjectWallClockIsReadAsUtc(): void
+    public function testDateTimeObjectForeignZoneIsConvertedToUtc(): void
     {
         $dt = new DateTime('2024-01-15 14:30:45', new DateTimeZone('Europe/Berlin'));
 
         $result = ($this->projectWire)(['at' => $dt], ['at' => 'date-time']);
 
-        $this->assertSame('2024-01-15T14:30:45+00:00', $result['at']);
+        $this->assertSame('2024-01-15T13:30:45+00:00', $result['at']);
     }
 
-    public function testDateTimeImmutableWallClockIsReadAsUtc(): void
+    public function testDateTimeImmutableForeignZoneIsConvertedToUtc(): void
     {
         $dt = new DateTimeImmutable('2024-07-01 09:00:00', new DateTimeZone('America/New_York'));
 
         $result = ($this->projectWire)(['at' => $dt], ['at' => 'date-time']);
 
-        $this->assertSame('2024-07-01T09:00:00+00:00', $result['at']);
+        $this->assertSame('2024-07-01T13:00:00+00:00', $result['at']);
+    }
+
+    public function testConvertsForeignZoneToUtc(): void
+    {
+        $dt = new DateTimeImmutable('2024-03-10 08:00:00', new DateTimeZone('+05:30'));
+
+        $result = ($this->projectWire)(['at' => $dt], ['at' => 'date-time']);
+
+        $this->assertSame('2024-03-10T02:30:00+00:00', $result['at']);
+    }
+
+    public function testDoesNotMutateTheCallersDateTime(): void
+    {
+        $dt = new DateTime('2024-01-15 14:30:45', new DateTimeZone('Europe/Berlin'));
+
+        ($this->projectWire)(['at' => $dt], ['at' => 'date-time']);
+
+        $this->assertSame('Europe/Berlin', $dt->getTimezone()->getName());
+        $this->assertSame('2024-01-15 14:30:45', $dt->format('Y-m-d H:i:s'));
+    }
+
+    public function testDateAndTimeObjectsKeepTheirWallClock(): void
+    {
+        $dt = new DateTimeImmutable('2024-01-15 23:30:15', new DateTimeZone('Asia/Tokyo'));
+
+        $result = ($this->projectWire)(['d' => $dt, 't' => $dt], ['d' => 'date', 't' => 'time']);
+
+        $this->assertSame('2024-01-15', $result['d']);
+        $this->assertSame('23:30:15', $result['t']);
     }
 
     // Zusage 4
