@@ -16,9 +16,10 @@ use Exception;
  * A type map names, per payload key, the wire format ('date', 'date-time',
  * 'time') or, for a child, a nested map. Keys not in the map pass through.
  *
- * All wall-clock values are UTC by convention: a DateTimeInterface is NOT
- * converted, its wall clock is read as UTC; strings without offset are read
- * as UTC, strings with an offset are converted to UTC. Zero-dates, empty and
+ * Wire values are UTC: a 'date-time' DateTimeInterface is converted to UTC
+ * before formatting (the caller's object is never modified); strings without
+ * offset are read as UTC, strings with an offset are converted to UTC. 'date'
+ * and 'time' objects keep their own wall clock. Zero-dates, empty and
  * unparsable strings become null. Sub-second precision is dropped.
  *
  * Stateless — no internal caches.
@@ -81,7 +82,9 @@ class ProjectWire
     private function dateTime(string|DateTimeInterface $value): ?string
     {
         if ($value instanceof DateTimeInterface) {
-            return $value->format('Y-m-d\TH:i:s') . '+00:00';
+            return DateTimeImmutable::createFromInterface($value)
+                ->setTimezone(new DateTimeZone('UTC'))
+                ->format('Y-m-d\TH:i:s') . '+00:00';
         }
 
         $parsed = $this->parse($value);
