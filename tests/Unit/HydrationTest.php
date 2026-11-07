@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace JardisSupport\Data\Tests\Unit;
 
+use JardisSupport\Contract\Data\Absent;
+use JardisSupport\Data\FieldMapper;
 use JardisSupport\Data\Hydration;
 use PHPUnit\Framework\TestCase;
 
@@ -459,6 +461,61 @@ class HydrationTest extends TestCase
 
         $this->assertNull($entity->getPasswordHash());
         $this->assertSame(['password_hash' => null], $this->hydration->getChanges($entity));
+    }
+
+    public function testApplyLeavesPropertyUntouchedWhenKeyIsMissing(): void
+    {
+        $entity = $this->skipEntity();
+        $this->hydration->hydrate($entity, ['id' => 1, 'name' => 'John', 'password_hash' => 'secret']);
+
+        $this->hydration->apply($entity, ['name' => 'Jane']);
+
+        $this->assertSame('Jane', $entity->getName());
+        $this->assertSame('secret', $entity->getPasswordHash());
+        $this->assertSame(['name' => 'Jane'], $this->hydration->getChanges($entity));
+    }
+
+    public function testApplyNeverWritesAbsentEvenWhenPassedDirectly(): void
+    {
+        $entity = $this->skipEntity();
+        $this->hydration->hydrate($entity, ['id' => 1, 'name' => 'John', 'password_hash' => 'secret']);
+
+        $this->hydration->apply($entity, ['name' => Absent::Value, 'password_hash' => Absent::Value]);
+
+        $this->assertSame('John', $entity->getName());
+        $this->assertSame('secret', $entity->getPasswordHash());
+        $this->assertSame([], $this->hydration->getChanges($entity));
+    }
+
+    public function testApplyOfToColumnsOutputNeverWritesAbsent(): void
+    {
+        $entity = $this->skipEntity();
+        $this->hydration->hydrate($entity, ['id' => 1, 'name' => 'John', 'password_hash' => 'secret']);
+
+        $columns = (new FieldMapper())->toColumns(
+            ['name' => 'Jane', 'passwordHash' => Absent::Value],
+            ['passwordHash' => 'password_hash'],
+        );
+        $this->hydration->apply($entity, $columns);
+
+        $this->assertSame('Jane', $entity->getName());
+        $this->assertSame('secret', $entity->getPasswordHash());
+        $this->assertSame(['name' => 'Jane'], $this->hydration->getChanges($entity));
+    }
+
+    public function testApplyOfToColumnsOutputWritesDeliveredNull(): void
+    {
+        $entity = $this->skipEntity();
+        $this->hydration->hydrate($entity, ['id' => 1, 'name' => 'John', 'password_hash' => 'secret']);
+
+        $columns = (new FieldMapper())->toColumns(
+            ['name' => Absent::Value, 'passwordHash' => null],
+            ['passwordHash' => 'password_hash'],
+        );
+        $this->hydration->apply($entity, $columns);
+
+        $this->assertSame('John', $entity->getName());
+        $this->assertNull($entity->getPasswordHash());
     }
 
     private function skipEntity(): object
