@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace JardisSupport\Data\Tests\Unit;
 
+use JardisSupport\Contract\Data\Absent;
 use JardisSupport\Data\FieldMapper;
 use PHPUnit\Framework\TestCase;
 
@@ -123,6 +124,66 @@ class FieldMapperTest extends TestCase
             ['name' => null, 'order_number' => 'O-1', 'email' => null],
             $this->fieldMapper->toColumns($input, $this->map, [])
         );
+    }
+
+    // --- toColumns: Absent (not delivered) ---
+
+    public function testToColumnsOmitsAbsentWithMap(): void
+    {
+        $input = ['customerName' => Absent::Value, 'orderNumber' => 'O-1'];
+
+        $result = $this->fieldMapper->toColumns($input, $this->map);
+
+        $this->assertSame(['order_number' => 'O-1'], $result);
+    }
+
+    public function testToColumnsOmitsAbsentWithEmptyMap(): void
+    {
+        // Trap: the early return for an empty map and an empty skip list must not pass Absent through.
+        $input = ['a' => 1, 'b' => Absent::Value, 'c' => null];
+
+        $result = $this->fieldMapper->toColumns($input, []);
+
+        $this->assertSame(['a' => 1, 'c' => null], $result);
+    }
+
+    public function testToColumnsOmitsAbsentWithSkipNullColumns(): void
+    {
+        $input = ['customerName' => Absent::Value, 'passwordHash' => null, 'orderNumber' => Absent::Value, 'email' => 'x'];
+        $map = $this->map + ['passwordHash' => 'password_hash'];
+
+        $result = $this->fieldMapper->toColumns($input, $map, ['password_hash', 'name']);
+
+        $this->assertSame(['email' => 'x'], $result);
+    }
+
+    public function testToColumnsOmitsAbsentWithEmptyMapAndSkipList(): void
+    {
+        $result = $this->fieldMapper->toColumns(['a' => Absent::Value, 'b' => null, 'c' => 1], [], ['b']);
+
+        $this->assertSame(['c' => 1], $result);
+    }
+
+    public function testToColumnsKeepsNullNextToAbsent(): void
+    {
+        $input = ['customerName' => null, 'orderNumber' => Absent::Value];
+
+        $result = $this->fieldMapper->toColumns($input, $this->map);
+
+        $this->assertSame(['name' => null], $result);
+    }
+
+    public function testToColumnsAllAbsentYieldsEmptyArray(): void
+    {
+        $this->assertSame([], $this->fieldMapper->toColumns(['a' => Absent::Value], []));
+        $this->assertSame([], $this->fieldMapper->toColumns(['a' => Absent::Value], $this->map));
+    }
+
+    public function testToColumnsWithoutAbsentKeepsEmptyMapIdentity(): void
+    {
+        $input = ['a' => 1, 'b' => null, 'c' => ['x' => 1]];
+
+        $this->assertSame($input, $this->fieldMapper->toColumns($input, []));
     }
 
     // --- fromColumns ---

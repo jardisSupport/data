@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace JardisSupport\Data;
 
+use JardisSupport\Contract\Data\Absent;
 use JardisSupport\Contract\Data\FieldMapperInterface;
 
 /**
@@ -17,6 +18,11 @@ class FieldMapper implements FieldMapperInterface
     /**
      * Renames array keys from domain field names to database column names.
      *
+     * A value of `Absent::Value` marks a field the caller did not deliver: its key is always
+     * omitted from the result (no column is written), with or without a map or skip list.
+     * A delivered `null` is kept, unless its column is listed in `$skipNullColumns`.
+     * Works on the top level only; a nested array is passed through as is.
+     *
      * @param array<string, mixed> $data Input with domain field names as keys
      * @param array<string, string> $map Domain-to-column mapping
      * @param array<int, string> $skipNullColumns Column names whose `null` value is omitted from the result
@@ -25,13 +31,16 @@ class FieldMapper implements FieldMapperInterface
      */
     public function toColumns(array $data, array $map, array $skipNullColumns = []): array
     {
-        if ($map === [] && $skipNullColumns === []) {
+        if ($map === [] && $skipNullColumns === [] && !in_array(Absent::Value, $data, true)) {
             return $data;
         }
 
         $skip = array_flip($skipNullColumns);
         $result = [];
         foreach ($data as $key => $value) {
+            if ($value === Absent::Value) {
+                continue;
+            }
             $column = $map[$key] ?? $key;
             if ($value === null && isset($skip[$column])) {
                 continue;

@@ -108,6 +108,26 @@ $hydration->apply($user, ['first_name' => 'John', 'password_hash' => null], ['pa
 
 An empty list (the default) keeps the previous behaviour byte-for-byte.
 
+## Partial writes: `Absent` is not written
+
+A field the caller did not deliver is `JardisSupport\Contract\Data\Absent::Value`, distinct from a delivered `null`.
+`toColumns()` omits every key with that value — with a map, with an empty map, and with a skip list.
+`null` stays in the result (it clears a nullable column) unless its column is in the skip list.
+The check covers the top level only; `Absent` inside a nested array is not looked at.
+
+```php
+use JardisSupport\Contract\Data\Absent;
+
+$row = $mapper->toColumns(
+    ['name' => 'Jane', 'phone' => null, 'nickname' => Absent::Value],
+    [],
+);
+// ['name' => 'Jane', 'phone' => null]  — nickname is not written, phone is set to NULL
+```
+
+`Hydration::apply()` never writes `Absent` either, so the output of `toColumns()` goes straight into it:
+an absent key leaves the property untouched.
+
 ## Interfaces
 
 All three services implement port interfaces from `jardissupport/contracts`:
