@@ -25,14 +25,14 @@ Three focused services for entity hydration and DTO mapping in PHP: **Hydration*
 - **Identity Generation** — UUID v4 (random), v5 (deterministic), v7 (time-ordered with monotonic counter), and NanoID (compact, URL-safe)
 - **PHP Attributes** — `#[Table]`, `#[Column]`, `#[PrimaryKey]`, `#[Aggregate]` for entity metadata
 - **TypeCaster** — automatic DB-to-PHP type conversion (int, bool, float, DateTime, DateTimeImmutable, BackedEnum); DateTime/DateTimeImmutable fall back to PHP's general date parser for anything beyond the three fixed formats, so TIMESTAMPTZ/ISO-8601 strings with offset and/or microseconds (e.g. `2026-08-28 12:34:56.123456+00`, `2026-08-28T12:34:56Z`) parse correctly instead of silently returning `null`
-- **ProjectWire** — stateless handler for the opposite direction (PHP → JSON wire): `(new ProjectWire())($payload, $typeMap)` projects date/time values per a type map (`'date'`, `'date-time'`, `'time'`, or a nested map for child arrays/lists). Wire values are UTC: a `date-time` `DateTimeInterface` is converted to UTC before formatting (the caller's object is not modified; `date`/`time` objects keep their own wall clock), strings without offset are read as UTC, strings with offset are converted to UTC; `date-time` yields `Y-m-d\TH:i:s+00:00` (no sub-seconds). Zero-dates, empty and unparsable strings become `null`; unmapped keys pass through unchanged
+- **ProjectWire** — stateless handler for the opposite direction (PHP → JSON wire): `(new ProjectWire())($payload, $typeMap)` projects values per a type map (`'date'`, `'date-time'`, `'time'`, `'boolean'`, or a nested map for child arrays/lists). `'boolean'` turns the flat-row form of a boolean column (`1`/`0`, `'1'`/`'0'`, `true`/`false`) into a JSON boolean; `null` stays `null`, any other value becomes `null` (never silently `false`). Wire values are UTC: a `date-time` `DateTimeInterface` is converted to UTC before formatting (the caller's object is not modified; `date`/`time` objects keep their own wall clock), strings without offset are read as UTC, strings with offset are converted to UTC; `date-time` yields `Y-m-d\TH:i:s+00:00` (no sub-seconds). Zero-dates, empty and unparsable strings become `null`; unmapped keys pass through unchanged
 
 ```php
 $wire = (new ProjectWire())(
-    ['name' => 'Jane', 'created_at' => '2024-01-15 14:30:45', 'items' => [['due' => '2024-02-01 00:00:00']]],
-    ['created_at' => 'date-time', 'items' => ['due' => 'date']]
+    ['name' => 'Jane', 'active' => 1, 'created_at' => '2024-01-15 14:30:45', 'items' => [['due' => '2024-02-01 00:00:00']]],
+    ['active' => 'boolean', 'created_at' => 'date-time', 'items' => ['due' => 'date']]
 );
-// ['name' => 'Jane', 'created_at' => '2024-01-15T14:30:45+00:00', 'items' => [['due' => '2024-02-01']]]
+// ['name' => 'Jane', 'active' => true, 'created_at' => '2024-01-15T14:30:45+00:00', 'items' => [['due' => '2024-02-01']]]
 ```
 
 ---

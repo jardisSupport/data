@@ -14,13 +14,19 @@ use Exception;
  *
  * Counterpart to TypeCaster (DB → PHP): this handler goes PHP → wire.
  * A type map names, per payload key, the wire format ('date', 'date-time',
- * 'time') or, for a child, a nested map. Keys not in the map pass through.
+ * 'time', 'boolean') or, for a child, a nested map. Keys not in the map pass
+ * through.
  *
  * Wire values are UTC: a 'date-time' DateTimeInterface is converted to UTC
  * before formatting (the caller's object is never modified); strings without
  * offset are read as UTC, strings with an offset are converted to UTC. 'date'
  * and 'time' objects keep their own wall clock. Zero-dates, empty and
  * unparsable strings become null. Sub-second precision is dropped.
+ *
+ * 'boolean' turns the flat-row representation of a boolean column (int 1/0,
+ * string '1'/'0', or an already native bool) into a JSON boolean. null stays
+ * null; any other value is not a boolean and becomes null (same form as an
+ * unparsable date) — it is never silently coerced to false.
  *
  * Stateless — no internal caches.
  */
@@ -67,6 +73,10 @@ class ProjectWire
             return $this->__invoke($value, $spec);
         }
 
+        if ($spec === 'boolean') {
+            return $this->boolean($value);
+        }
+
         if (!is_string($value) && !$value instanceof DateTimeInterface) {
             return $value;
         }
@@ -76,6 +86,15 @@ class ProjectWire
             'date' => $this->date($value),
             'time' => $this->time($value),
             default => $value,
+        };
+    }
+
+    private function boolean(mixed $value): ?bool
+    {
+        return match ($value) {
+            true, 1, '1' => true,
+            false, 0, '0' => false,
+            default => null,
         };
     }
 
