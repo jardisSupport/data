@@ -8,6 +8,7 @@ use DateTime;
 use DateTimeImmutable;
 use DateTimeZone;
 use JardisSupport\Data\Handler\ProjectWire;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -214,5 +215,84 @@ class ProjectWireTest extends TestCase
 
         $this->assertSame($child, $result['child']);
         $this->assertSame([$child], $result['list']);
+    }
+
+    /**
+     * @return array<string, array{mixed, bool}>
+     */
+    public static function booleanSourceProvider(): array
+    {
+        return [
+            'int one' => [1, true],
+            'int zero' => [0, false],
+            'string one' => ['1', true],
+            'string zero' => ['0', false],
+            'bool true' => [true, true],
+            'bool false' => [false, false],
+        ];
+    }
+
+    #[DataProvider('booleanSourceProvider')]
+    public function testBooleanFormatYieldsJsonBoolean(mixed $source, bool $expected): void
+    {
+        $result = ($this->projectWire)(['flag' => $source], ['flag' => 'boolean']);
+
+        $this->assertSame($expected, $result['flag']);
+        $this->assertSame($expected ? '{"flag":true}' : '{"flag":false}', json_encode($result));
+    }
+
+    public function testBooleanFormatKeepsNullAsNull(): void
+    {
+        $result = ($this->projectWire)(['flag' => null], ['flag' => 'boolean']);
+
+        $this->assertNull($result['flag']);
+        $this->assertSame('{"flag":null}', json_encode($result));
+    }
+
+    /**
+     * @return array<string, array{mixed}>
+     */
+    public static function invalidBooleanSourceProvider(): array
+    {
+        return [
+            'int two' => [2],
+            'negative int' => [-1],
+            'float' => [1.5],
+            'text' => ['yes'],
+            'empty string' => [''],
+            'array' => [[1]],
+        ];
+    }
+
+    #[DataProvider('invalidBooleanSourceProvider')]
+    public function testBooleanFormatNeverCoercesInvalidValueToFalse(mixed $source): void
+    {
+        $result = ($this->projectWire)(['flag' => $source], ['flag' => 'boolean']);
+
+        $this->assertNull($result['flag']);
+    }
+
+    public function testBooleanFormatAppliesInNestedMapAndLists(): void
+    {
+        $result = ($this->projectWire)(
+            ['items' => [['active' => 1, 'at' => '2024-01-15 10:00:00'], ['active' => '0', 'at' => null]]],
+            ['items' => ['active' => 'boolean', 'at' => 'date-time']]
+        );
+
+        $this->assertTrue($result['items'][0]['active']);
+        $this->assertFalse($result['items'][1]['active']);
+        $this->assertSame('2024-01-15T10:00:00+00:00', $result['items'][0]['at']);
+    }
+
+    public function testBooleanFormatLeavesUnmappedKeysAndOtherFormatsUntouched(): void
+    {
+        $result = ($this->projectWire)(
+            ['flag' => 1, 'count' => 1, 'on' => '2024-01-15 10:00:00'],
+            ['flag' => 'boolean', 'on' => 'date']
+        );
+
+        $this->assertTrue($result['flag']);
+        $this->assertSame(1, $result['count']);
+        $this->assertSame('2024-01-15', $result['on']);
     }
 }
