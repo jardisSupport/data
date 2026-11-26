@@ -13,11 +13,23 @@ namespace JardisSupport\Data\Handler;
  * within the same millisecond (e.g. batch inserts of aggregate children).
  * UUIDs are lexicographically sortable by creation time.
  * Format: xxxxxxxx-xxxx-7xxx-yxxx-xxxxxxxxxxxx
+ *
+ * Ordering holds for the whole PHP process, across all instances of this class:
+ * a UUID generated later is always greater than any generated before in the same
+ * process. Ordering across separate PHP processes is not guaranteed.
  */
 class GenerateUuid7
 {
-    private int $lastTimestamp = 0;
-    private int $counter = 0;
+    /*
+     * Process-wide state, a deliberate exception to "static only for VO named
+     * constructors" (decision Rolf 2026-11-27, R2): the interface promises UUIDs
+     * sortable by creation time without an instance boundary, and callers create a
+     * new Identity/GenerateUuid7 per use. Per-instance state restarted the counter at
+     * a random value for every new instance and broke the order within one
+     * millisecond. Only the last timestamp and the counter are shared.
+     */
+    private static int $lastTimestamp = 0;
+    private static int $counter = 0;
 
     /**
      * Generates and returns a new UUID v7 string.
@@ -29,21 +41,21 @@ class GenerateUuid7
         // 48-bit Unix timestamp in milliseconds
         $timestamp = (int) (microtime(true) * 1000);
 
-        if ($timestamp === $this->lastTimestamp) {
+        if ($timestamp === self::$lastTimestamp) {
             // Same millisecond: increment counter
-            $this->counter++;
-            if ($this->counter > 0xFFF) {
+            self::$counter++;
+            if (self::$counter > 0xFFF) {
                 // Counter overflow: wait for next millisecond
-                while ($timestamp === $this->lastTimestamp) {
+                while ($timestamp === self::$lastTimestamp) {
                     $timestamp = (int) (microtime(true) * 1000);
                 }
-                $this->counter = random_int(0, 0x1F);
+                self::$counter = random_int(0, 0x1F);
             }
         } else {
-            // New millisecond: randomize counter start to avoid collisions across instances
-            $this->counter = random_int(0, 0x1F);
+            // New millisecond: start the counter at a small random value, leaving room for a batch
+            self::$counter = random_int(0, 0x1F);
         }
-        $this->lastTimestamp = $timestamp;
+        self::$lastTimestamp = $timestamp;
 
         // 8 random bytes for rand_b (bytes 8-15)
         $random = random_bytes(8);
@@ -55,8 +67,8 @@ class GenerateUuid7
         $bytes = substr($bytes, 2, 6);
 
         // Bytes 6-7: 4-bit version (0111) + 12-bit monotonic counter
-        $byte6 = (($this->counter >> 8) & 0x0F) | 0x70; // version 7 + counter high 4 bits
-        $byte7 = $this->counter & 0xFF; // counter low 8 bits
+        $byte6 = ((self::$counter >> 8) & 0x0F) | 0x70; // version 7 + counter high 4 bits
+        $byte7 = self::$counter & 0xFF; // counter low 8 bits
         $bytes .= chr($byte6) . chr($byte7);
 
         // Bytes 8-15: 2-bit variant (10) + 62-bit rand_b

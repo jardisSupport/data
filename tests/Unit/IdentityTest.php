@@ -66,4 +66,59 @@ class IdentityTest extends TestCase
 
         $this->assertSame(10, strlen($id));
     }
+
+    /**
+     * Contract A9-U1: 20,000 UUID v7, each from a fresh Identity object, keep the
+     * order of their creation (0 misplacements).
+     */
+    public function testUuid7KeepsCreationOrderAcrossFreshIdentityObjects(): void
+    {
+        $uuids = [];
+        for ($i = 0; $i < 20000; $i++) {
+            $uuids[] = (new Identity())->generateUuid7();
+        }
+
+        $this->assertSame(0, $this->countMisplacements($uuids));
+    }
+
+    /**
+     * Contract A9-U2: two Identity objects used alternately within the same
+     * millisecond produce strictly ascending, unique UUID v7 of unchanged form.
+     */
+    public function testUuid7StrictlyAscendingForTwoAlternatingIdentityObjects(): void
+    {
+        $first = new Identity();
+        $second = new Identity();
+        $uuids = [];
+        for ($i = 0; $i < 1000; $i++) {
+            $uuids[] = $first->generateUuid7();
+            $uuids[] = $second->generateUuid7();
+        }
+
+        $this->assertSame(0, $this->countMisplacements($uuids));
+        $this->assertCount(2000, array_unique($uuids));
+        foreach ($uuids as $uuid) {
+            $this->assertMatchesRegularExpression(
+                '/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/',
+                $uuid
+            );
+        }
+    }
+
+    /**
+     * Counts positions whose UUID is not strictly greater than its predecessor.
+     *
+     * @param array<int, string> $uuids
+     */
+    private function countMisplacements(array $uuids): int
+    {
+        $misplacements = 0;
+        for ($i = 1, $count = count($uuids); $i < $count; $i++) {
+            if (strcmp($uuids[$i], $uuids[$i - 1]) <= 0) {
+                $misplacements++;
+            }
+        }
+
+        return $misplacements;
+    }
 }
