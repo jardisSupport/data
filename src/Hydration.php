@@ -15,7 +15,9 @@ use JardisSupport\Data\Handler\GetPropertyValue;
 use JardisSupport\Data\Handler\GetSnapshot;
 use JardisSupport\Data\Handler\HydrateAggregate;
 use JardisSupport\Data\Handler\HydrateEntity;
+use JardisSupport\Data\Handler\IsHydratableColumn;
 use JardisSupport\Data\Handler\LoadMultiple;
+use JardisSupport\Data\Handler\MergeSnapshot;
 use JardisSupport\Data\Handler\SetPropertyValue;
 use JardisSupport\Data\Handler\SetSnapshot;
 use JardisSupport\Data\Handler\ToSnapshotValue;
@@ -41,6 +43,7 @@ class Hydration implements HydrationInterface
     private ?EntityToArray $entityToArray = null;
     private ?AggregateToArray $aggregateToArray = null;
     private ?LoadMultiple $loadMultiple = null;
+    private ?MergeSnapshot $mergeSnapshot = null;
 
     // Cached shared helper instances
     private ?ColumnNameToPropertyName $columnNameToPropertyName = null;
@@ -49,6 +52,8 @@ class Hydration implements HydrationInterface
     private ?SetSnapshot $setSnapshot = null;
     private ?TypeCaster $typeCaster = null;
     private ?ToSnapshotValue $toSnapshotValue = null;
+    private ?IsHydratableColumn $isHydratableColumn = null;
+
     /**
      * Hydrates an entity with data from a database.
      *
@@ -85,6 +90,25 @@ class Hydration implements HydrationInterface
         }
 
         ($this->getHydrateEntity())($entity, $data, false);
+        return $entity;
+    }
+
+    /**
+     * Merges column values into the snapshot of an entity without setting any property.
+     *
+     * The columns are filtered and type-cast as by hydrate(), so the snapshot takes the
+     * same form hydrate() gives it; property values and snapshot columns not in $data
+     * stay unchanged. getChanges() then compares the current values against the merged
+     * snapshot.
+     *
+     * @template T of object
+     * @param T $entity
+     * @param array<string, mixed> $data Column name => value
+     * @return T
+     */
+    public function mergeSnapshot(object $entity, array $data): object
+    {
+        ($this->getMergeSnapshot())($entity, $data);
         return $entity;
     }
 
@@ -251,6 +275,24 @@ class Hydration implements HydrationInterface
             $this->getGetSnapshot(),
             $this->getGetPropertyValue(),
             $this->getColumnNameToPropertyName(),
+            $this->getToSnapshotValue(),
+            $this->getIsHydratableColumn()
+        );
+    }
+
+    private function getIsHydratableColumn(): IsHydratableColumn
+    {
+        return $this->isHydratableColumn ??= new IsHydratableColumn($this->getColumnNameToPropertyName());
+    }
+
+    private function getMergeSnapshot(): MergeSnapshot
+    {
+        return $this->mergeSnapshot ??= new MergeSnapshot(
+            $this->getGetSnapshot(),
+            $this->getSetSnapshot(),
+            $this->getIsHydratableColumn(),
+            $this->getColumnNameToPropertyName(),
+            $this->getTypeCaster(),
             $this->getToSnapshotValue()
         );
     }
