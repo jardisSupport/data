@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace JardisSupport\Data\Tests\Unit;
 
+use DateTimeImmutable;
 use JardisSupport\Contract\Data\Absent;
 use JardisSupport\Data\FieldMapper;
 use JardisSupport\Data\Hydration;
+use JardisSupport\Data\Tests\Unit\Fixtures\Counter;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -639,5 +642,74 @@ class HydrationTest extends TestCase
         $this->assertContains('first_name', $changedFields);
         $this->assertContains('last_name', $changedFields);
         $this->assertNotContains('email', $changedFields);
+    }
+
+    /**
+     * Contract A6-L1: value B, snapshot B, merging A leaves the value at B, sets the
+     * snapshot to A and getChanges() reports the column. Other snapshot columns stay.
+     */
+    public function testMergeSnapshotKeepsValueAndReportsColumnAsChanged(): void
+    {
+        $counter = new Counter();
+        $this->hydration->hydrate($counter, ['identifier' => 'c-1', 'counter_number' => 'B']);
+
+        $result = $this->hydration->mergeSnapshot($counter, ['counter_number' => 'A']);
+
+        $this->assertSame($counter, $result);
+        $this->assertSame('B', $counter->getCounterNumber());
+        $this->assertSame('c-1', $counter->getIdentifier());
+        $this->assertSame(
+            ['identifier' => 'c-1', 'counter_number' => 'A'],
+            $this->hydration->getSnapshot($counter)
+        );
+        $this->assertSame(['counter_number' => 'B'], $this->hydration->getChanges($counter));
+    }
+
+    /**
+     * Contract A6-L2: value A, snapshot B, merging A aligns the snapshot with the
+     * value, so getChanges() no longer reports the column.
+     */
+    public function testMergeSnapshotMatchingValueClearsChange(): void
+    {
+        $counter = new Counter();
+        $this->hydration->hydrate($counter, ['counter_number' => 'B']);
+        $this->hydration->apply($counter, ['counter_number' => 'A']);
+
+        $this->hydration->mergeSnapshot($counter, ['counter_number' => 'A']);
+
+        $this->assertSame('A', $counter->getCounterNumber());
+        $this->assertSame(['counter_number' => 'A'], $this->hydration->getSnapshot($counter));
+        $this->assertSame([], $this->hydration->getChanges($counter));
+    }
+
+    /**
+     * Contract A6-L3: a date column merged as text or as object lands in the snapshot
+     * in the same form hydrate() gives a twin entity for the same data; the property
+     * itself stays untouched.
+     */
+    #[DataProvider('dateColumnProvider')]
+    public function testMergeSnapshotTypesDateColumnLikeHydrate(mixed $activeFrom): void
+    {
+        $twin = new Counter();
+        $this->hydration->hydrate($twin, ['active_from' => $activeFrom]);
+        $counter = new Counter();
+
+        $this->hydration->mergeSnapshot($counter, ['active_from' => $activeFrom]);
+
+        $this->assertSame($this->hydration->getSnapshot($twin), $this->hydration->getSnapshot($counter));
+        $this->assertIsString($this->hydration->getSnapshot($counter)['active_from']);
+        $this->assertNull($counter->getActiveFrom());
+    }
+
+    /**
+     * @return array<string, array{mixed}>
+     */
+    public static function dateColumnProvider(): array
+    {
+        return [
+            'text' => ['2026-01-01 10:00:00'],
+            'text with offset and fraction' => ['2026-01-01 10:00:00.123456+02:00'],
+            'object' => [new DateTimeImmutable('2026-01-01 10:00:00')],
+        ];
     }
 }

@@ -16,13 +16,14 @@ Three focused services for entity hydration and DTO mapping in PHP: **Hydration*
 
 - **Two-Stage Hydration** — `hydrate()` for flat entities, `hydrateAggregate()` for nested aggregates with recursive object graphs
 - **Programmatic Apply** — `apply()` sets properties like `hydrate()` but preserves the snapshot — changes are detected by `getChanges()`
+- **Snapshot Merge** — `mergeSnapshot()` is the counterpart of `apply()`: it merges column values into the snapshot only (filtered and type-cast as by `hydrate()`), property values and other snapshot columns stay — e.g. to record a read basis without overwriting the entity
 - **Automatic Snapshots** — a snapshot is taken on every hydration call to establish the baseline for change detection. Snapshot keys are the original DB column names — used as source of truth for `toArray()`, `aggregateToArray()`, and `diff()`
 - **Value-Based Detection** — `toArray()` and `diff()` automatically distinguish DB columns from relations by value type — no attributes required
 - **Change Tracking** — field-level diff between current property values and the snapshot via `getChanges()`
 - **Entity Cloning** — `clone()` for flat entity clone (DB columns), `cloneAggregate()` for deep clone including nested objects
 - **Batch Loading** — `loadMultiple()` hydrates an array of database rows into an array of entities efficiently
 - **Field Mapping** — `toColumns()` and `fromColumns()` rename array keys between domain and database names using an explicit map; `fromAggregate()` maps hierarchical arrays with per-entity mappings and filters unmapped keys
-- **Identity Generation** — UUID v4 (random), v5 (deterministic), v7 (time-ordered with monotonic counter), and NanoID (compact, URL-safe)
+- **Identity Generation** — UUID v4 (random), v5 (deterministic), v7 (time-ordered with monotonic counter; within one PHP process a later UUID v7 is always greater, across all `Identity` objects), and NanoID (compact, URL-safe)
 - **PHP Attributes** — `#[Table]`, `#[Column]`, `#[PrimaryKey]`, `#[Aggregate]` for entity metadata
 - **TypeCaster** — automatic DB-to-PHP type conversion (int, bool, float, DateTime, DateTimeImmutable, BackedEnum); DateTime/DateTimeImmutable fall back to PHP's general date parser for anything beyond the three fixed formats, so TIMESTAMPTZ/ISO-8601 strings with offset and/or microseconds (e.g. `2026-08-28 12:34:56.123456+00`, `2026-08-28T12:34:56Z`) parse correctly instead of silently returning `null`
 - **ProjectWire** — stateless handler for the opposite direction (PHP → JSON wire): `(new ProjectWire())($payload, $typeMap)` projects values per a type map (`'date'`, `'date-time'`, `'time'`, `'boolean'`, or a nested map for child arrays/lists). `'boolean'` turns the flat-row form of a boolean column (`1`/`0`, `'1'`/`'0'`, `true`/`false`) into a JSON boolean; `null` stays `null`, any other value becomes `null` (never silently `false`). Wire values are UTC: a `date-time` `DateTimeInterface` is converted to UTC before formatting (the caller's object is not modified; `date`/`time` objects keep their own wall clock), strings without offset are read as UTC, strings with offset are converted to UTC; `date-time` yields `Y-m-d\TH:i:s+00:00` (no sub-seconds). Zero-dates, empty and unparsable strings become `null`; unmapped keys pass through unchanged
@@ -69,10 +70,14 @@ $hydration->apply($user, ['first_name' => 'John']);
 $changes = $hydration->getChanges($user);
 // ['first_name' => 'John']
 
+// Merge a read basis into the snapshot only (properties stay)
+$hydration->mergeSnapshot($user, ['last_name' => 'Smith']);
+// $user->getLastName() is still 'Doe'; getChanges() now also reports ['last_name' => 'Doe']
+
 // --- Identity ---
 $identity = new Identity();
 
-$id = $identity->generateUuid7();   // time-ordered, sortable
+$id = $identity->generateUuid7();   // time-ordered, sortable (order holds across Identity objects within one PHP process)
 $id = $identity->generateUuid4();   // random
 $id = $identity->generateUuid5($namespace, 'customer:12345');  // deterministic
 $id = $identity->generateNanoId();  // compact, URL-safe (21 chars)
