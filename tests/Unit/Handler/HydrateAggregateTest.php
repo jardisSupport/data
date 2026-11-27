@@ -20,7 +20,9 @@ use JardisSupport\Data\Tests\Unit\Fixtures\Customer;
 use JardisSupport\Data\Tests\Unit\Fixtures\Gateway;
 use JardisSupport\Data\Tests\Unit\Fixtures\GatewayType;
 use JardisSupport\Data\Tests\Unit\Fixtures\OrderItem;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use TypeError;
 
 /**
  * Tests for HydrateAggregate handler.
@@ -888,5 +890,183 @@ class HydrateAggregateTest extends TestCase
 
         $gateway = $counter->getCounterGateway()->getGateway();
         $this->assertSame(GatewayType::Electricity, $gateway->getType());
+    }
+
+    /**
+     * Contract B3.1-N1: an object relation delivered as null, keyed snake_case or camelCase,
+     * leaves the root snapshot equal to a twin hydrated without the key; the setter sets null.
+     */
+    #[DataProvider('nullObjectRelationKeyProvider')]
+    public function testNullObjectRelationStaysOutOfRootSnapshot(string $key): void
+    {
+        $base = ['id' => 1, 'identifier' => 'C-1', 'counter_number' => 'N-1'];
+        $twin = new Counter();
+        $this->hydrateAggregate->__invoke($twin, $base);
+        $counter = new Counter();
+        $counter->setCounterGateway(new CounterGateway());
+
+        $this->hydrateAggregate->__invoke($counter, $base + [$key => null]);
+
+        $this->assertSame($twin->getSnapshot(), $counter->getSnapshot());
+        $this->assertNull($counter->getCounterGateway());
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function nullObjectRelationKeyProvider(): array
+    {
+        return [
+            'snake_case key' => ['counter_gateway'],
+            'camelCase key' => ['counterGateway'],
+        ];
+    }
+
+    /**
+     * Contract B3.1-N1: the same holds for an object relation without a setter
+     * (assigned directly).
+     */
+    public function testNullObjectRelationWithoutSetterStaysOutOfRootSnapshot(): void
+    {
+        $base = ['id' => 'cust-1', 'name' => 'Jane', 'email' => 'jane@example.com'];
+        $twin = new Customer();
+        $this->hydrateAggregate->__invoke($twin, $base);
+        $customer = new Customer();
+
+        $this->hydrateAggregate->__invoke($customer, $base + ['billing_address' => null]);
+
+        $this->assertSame($twin->getSnapshot(), $customer->getSnapshot());
+        $this->assertNull($customer->getBillingAddress());
+    }
+
+    /**
+     * Contract B3.1-N2: one level deeper, in a single child, a null object relation stays
+     * out of the child snapshot while a null column of the child stays in it.
+     */
+    public function testNullObjectRelationStaysOutOfChildSnapshot(): void
+    {
+        $twin = new Counter();
+        $this->hydrateAggregate->__invoke(
+            $twin,
+            ['id' => 1, 'counter_gateway' => ['id' => 3, 'active_until' => null]]
+        );
+        $counter = new Counter();
+
+        $this->hydrateAggregate->__invoke(
+            $counter,
+            ['id' => 1, 'counter_gateway' => ['id' => 3, 'active_until' => null, 'gateway' => null]]
+        );
+
+        $child = $counter->getCounterGateway();
+        $this->assertNotNull($child);
+        $this->assertSame($twin->getCounterGateway()?->getSnapshot(), $child->getSnapshot());
+        $this->assertArrayHasKey('active_until', $child->getSnapshot());
+        $this->assertNull($child->getGateway());
+        $this->assertSame($twin->getSnapshot(), $counter->getSnapshot());
+    }
+
+    /**
+     * Contract B3.1-N2: in a list element, a null object relation stays out of the
+     * element snapshot.
+     */
+    public function testNullObjectRelationStaysOutOfListElementSnapshot(): void
+    {
+        $root = new class {
+            /** @var \JardisSupport\Data\Tests\Unit\Fixtures\Customer[] */
+            private array $customers = [];
+            private array $__snapshot = [];
+
+            /** @return array<int, Customer> */
+            public function getCustomers(): array
+            {
+                return $this->customers;
+            }
+        };
+        $twin = clone $root;
+        $element = ['id' => 'cust-1', 'name' => 'Jane', 'email' => 'jane@example.com'];
+        $this->hydrateAggregate->__invoke($twin, ['customers' => [$element]]);
+
+        $this->hydrateAggregate->__invoke($root, ['customers' => [$element + ['billing_address' => null]]]);
+
+        $this->assertSame($twin->getCustomers()[0]->getSnapshot(), $root->getCustomers()[0]->getSnapshot());
+        $this->assertNull($root->getCustomers()[0]->getBillingAddress());
+    }
+
+    /**
+     * Contract B3.1-N3: a nullable list property whose element class resolves (docblock or
+     * adder) and is delivered as null stays out of the snapshot, like a twin without the key.
+     */
+    #[DataProvider('nullableListRelationProvider')]
+    public function testNullListRelationStaysOutOfSnapshot(object $prototype): void
+    {
+        $twin = clone $prototype;
+        $this->hydrateAggregate->__invoke($twin, ['name' => 'Order 1']);
+        $aggregate = clone $prototype;
+
+        $this->hydrateAggregate->__invoke($aggregate, ['name' => 'Order 1', 'items' => null]);
+
+        $this->assertSame((new GetSnapshot())($twin), (new GetSnapshot())($aggregate));
+        $this->assertNull((new GetPropertyValue(new ColumnNameToPropertyName()))($aggregate, 'items'));
+    }
+
+    /**
+     * Prototypes with a nullable list property `items` of OrderItem, element class resolved
+     * by docblock or by adder.
+     *
+     * @return array<string, array{object}>
+     */
+    public static function nullableListRelationProvider(): array
+    {
+        return [
+            'element class from @var' => [new class {
+                private ?string $name = null;
+                /** @var \JardisSupport\Data\Tests\Unit\Fixtures\OrderItem[] */
+                private ?array $items = null;
+                private array $__snapshot = [];
+
+                public function getName(): ?string
+                {
+                    return $this->name;
+                }
+
+                /** @return array<int, OrderItem>|null */
+                public function getItems(): ?array
+                {
+                    return $this->items;
+                }
+            }],
+            'element class from adder' => [new class {
+                private ?string $name = null;
+                private ?array $items = null;
+                private array $__snapshot = [];
+
+                public function getName(): ?string
+                {
+                    return $this->name;
+                }
+
+                /** @return array<int, OrderItem>|null */
+                public function getItems(): ?array
+                {
+                    return $this->items;
+                }
+
+                public function addItem(OrderItem $item): void
+                {
+                    $this->items[] = $item;
+                }
+            }],
+        ];
+    }
+
+    /**
+     * Contract B3.1-N6: null at a non-nullable list property is refused by the entity type
+     * while setting the property, before any snapshot is built; it never becomes [].
+     */
+    public function testNullAtNonNullableListPropertyThrowsTypeError(): void
+    {
+        $this->expectException(TypeError::class);
+
+        $this->hydrateAggregate->__invoke(new Counter(), ['counter_register' => null]);
     }
 }
