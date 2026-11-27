@@ -15,7 +15,8 @@ use ReflectionProperty;
  * Hydrates an aggregate with nested data structures.
  *
  * Uses value-based detection instead of #[Relation] attributes:
- * - scalar/null/DateTime/BackedEnum → DB column (set directly)
+ * - scalar/null/DateTime/BackedEnum → DB column (set directly); null at a relation
+ *   property (class type, or array with resolvable element class) stays out of the snapshot
  * - associative array + property type is class → ONE relation
  * - indexed array → MANY relation
  *
@@ -68,7 +69,7 @@ class HydrateAggregate
         }
 
         // Build snapshot — only DB-column values
-        $snapshot = $this->buildSnapshot($data, $aggregate);
+        $snapshot = $this->buildSnapshot($data, $aggregate, $properties);
         ($this->setSnapshot)($aggregate, $snapshot);
     }
 
@@ -198,7 +199,7 @@ class HydrateAggregate
         }
 
         // Build snapshot — only DB-column values
-        $snapshot = $this->buildSnapshot($data, $object);
+        $snapshot = $this->buildSnapshot($data, $object, $properties);
         ($this->setSnapshot)($object, $snapshot);
 
         return $object;
@@ -207,17 +208,28 @@ class HydrateAggregate
     /**
      * Build snapshot from data — only DB-column values.
      *
+     * A null value counts as a column unless its property is a relation property:
+     * a relation delivered as null stays out of the snapshot, like a missing key.
+     *
      * @param array<string|int, mixed> $data
      * @param object $entity
+     * @param array<string, ReflectionProperty> $properties
      * @return array<string, mixed>
      */
-    private function buildSnapshot(array $data, object $entity): array
+    private function buildSnapshot(array $data, object $entity, array $properties): array
     {
         $snapshot = ($this->getSnapshot)($entity);
 
         foreach ($data as $key => $value) {
             if (is_int($key)) {
                 continue;
+            }
+
+            if ($value === null) {
+                $property = $properties[($this->columnNameToPropertyName)($key)] ?? null;
+                if ($property !== null && $this->isRelationProperty($property, $entity)) {
+                    continue;
+                }
             }
 
             if ($this->isDbColumnValue($value)) {
@@ -227,6 +239,34 @@ class HydrateAggregate
         }
 
         return $snapshot;
+    }
+
+    /**
+     * Check if a property holds a relation, judged by its declared type only.
+     *
+     * - object property: the type is a class other than DateTimeInterface/BackedEnum
+     * - list property: the type accepts array (array, ?array, untyped) and an element class
+     *   resolves as for delivered list data (adder, then @var docblock)
+     *
+     * @param ReflectionProperty $property
+     * @param object $entity
+     * @return bool
+     */
+    private function isRelationProperty(ReflectionProperty $property, object $entity): bool
+    {
+        $type = $property->getType();
+
+        if ($type instanceof ReflectionNamedType && !$type->isBuiltin()) {
+            $typeName = $type->getName();
+
+            return !is_a($typeName, DateTimeInterface::class, true)
+                && !is_a($typeName, BackedEnum::class, true);
+        }
+
+        $acceptsArray = $type === null
+            || ($type instanceof ReflectionNamedType && $type->getName() === 'array');
+
+        return $acceptsArray && $this->resolveArrayElementType($property, $entity) !== null;
     }
 
     /**
