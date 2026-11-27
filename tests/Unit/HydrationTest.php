@@ -9,7 +9,12 @@ use JardisSupport\Contract\Data\Absent;
 use JardisSupport\Data\FieldMapper;
 use JardisSupport\Data\Hydration;
 use JardisSupport\Data\Tests\Unit\Fixtures\Counter;
+use JardisSupport\Data\Tests\Unit\Fixtures\CounterGateway;
+use JardisSupport\Data\Tests\Unit\Fixtures\Customer;
+use JardisSupport\Data\Tests\Unit\Fixtures\GatewayType;
+use JardisSupport\Data\Tests\Unit\Handler\HydrateAggregateTest;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\DataProviderExternal;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -711,5 +716,210 @@ class HydrationTest extends TestCase
             'text with offset and fraction' => ['2026-01-01 10:00:00.123456+02:00'],
             'object' => [new DateTimeImmutable('2026-01-01 10:00:00')],
         ];
+    }
+
+    /**
+     * Contract B3.1-N1: through the facade, an object relation delivered as null (snake_case or
+     * camelCase key) reads like a twin hydrated without the key in every snapshot reader.
+     */
+    #[DataProvider('nullCounterGatewayKeyProvider')]
+    public function testHydrateAggregateNullObjectRelationReadsLikeTwin(string $key): void
+    {
+        $base = ['id' => 1, 'identifier' => 'C-1', 'counter_number' => 'N-1'];
+        $twin = new Counter();
+        $this->hydration->hydrateAggregate($twin, $base);
+        $probe = new Counter();
+        $this->hydration->hydrateAggregate($probe, $base + ['counter_gateway' => ['id' => 3]]);
+        $counter = new Counter();
+
+        $this->hydration->hydrateAggregate($counter, $base + [$key => null]);
+
+        $this->assertNull($counter->getCounterGateway());
+        $this->assertReadsLikeTwin($counter, $twin, $probe);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function nullCounterGatewayKeyProvider(): array
+    {
+        return [
+            'snake_case key' => ['counter_gateway'],
+            'camelCase key' => ['counterGateway'],
+        ];
+    }
+
+    /**
+     * Contract B3.1-N1: the same for an object relation without a setter.
+     */
+    public function testHydrateAggregateNullObjectRelationWithoutSetterReadsLikeTwin(): void
+    {
+        $base = ['id' => 'cust-1', 'name' => 'Jane', 'email' => 'jane@example.com'];
+        $twin = new Customer();
+        $this->hydration->hydrateAggregate($twin, $base);
+        $probe = new Customer();
+        $this->hydration->hydrateAggregate(
+            $probe,
+            $base + ['billing_address' => ['street' => 'Main 1', 'city' => 'Town', 'zip_code' => '12345']]
+        );
+        $customer = new Customer();
+
+        $this->hydration->hydrateAggregate($customer, $base + ['billing_address' => null]);
+
+        $this->assertNull($customer->getBillingAddress());
+        $this->assertReadsLikeTwin($customer, $twin, $probe);
+    }
+
+    /**
+     * Contract B3.1-N2: one level deeper, the single child reads like its twin, the null column
+     * of the child stays, and the root graph is unchanged.
+     */
+    public function testHydrateAggregateNullObjectRelationInChildReadsLikeTwin(): void
+    {
+        $child = ['id' => 3, 'active_until' => null];
+        $twin = new Counter();
+        $this->hydration->hydrateAggregate($twin, ['id' => 1, 'counter_gateway' => $child]);
+        $probe = new Counter();
+        $this->hydration->hydrateAggregate(
+            $probe,
+            ['id' => 1, 'counter_gateway' => $child + ['gateway' => ['id' => 100]]]
+        );
+        $counter = new Counter();
+
+        $this->hydration->hydrateAggregate($counter, ['id' => 1, 'counter_gateway' => $child + ['gateway' => null]]);
+
+        $this->assertNotNull($counter->getCounterGateway());
+        $this->assertNotNull($twin->getCounterGateway());
+        $this->assertNotNull($probe->getCounterGateway());
+        $this->assertArrayHasKey('active_until', $this->hydration->getSnapshot($counter->getCounterGateway()));
+        $this->assertReadsLikeTwin(
+            $counter->getCounterGateway(),
+            $twin->getCounterGateway(),
+            $probe->getCounterGateway()
+        );
+        $this->assertSame($this->hydration->aggregateToArray($twin), $this->hydration->aggregateToArray($counter));
+    }
+
+    /**
+     * Contract B3.1-N2: in a list element, the element reads like its twin.
+     */
+    public function testHydrateAggregateNullObjectRelationInListElementReadsLikeTwin(): void
+    {
+        $root = new class {
+            /** @var \JardisSupport\Data\Tests\Unit\Fixtures\Customer[] */
+            private array $customers = [];
+            private array $__snapshot = [];
+
+            /** @return array<int, Customer> */
+            public function getCustomers(): array
+            {
+                return $this->customers;
+            }
+        };
+        $element = ['id' => 'cust-1', 'name' => 'Jane', 'email' => 'jane@example.com'];
+        $twin = clone $root;
+        $this->hydration->hydrateAggregate($twin, ['customers' => [$element]]);
+        $probe = clone $root;
+        $this->hydration->hydrateAggregate(
+            $probe,
+            ['customers' => [$element + ['billing_address' => ['street' => 'Main 1', 'city' => 'Town']]]]
+        );
+
+        $this->hydration->hydrateAggregate($root, ['customers' => [$element + ['billing_address' => null]]]);
+
+        $this->assertReadsLikeTwin($root->getCustomers()[0], $twin->getCustomers()[0], $probe->getCustomers()[0]);
+        $this->assertSame($this->hydration->aggregateToArray($twin), $this->hydration->aggregateToArray($root));
+    }
+
+    /**
+     * Contract B3.1-N3: a nullable list property with a resolvable element class, delivered as
+     * null, reads like a twin without the key.
+     */
+    #[DataProviderExternal(HydrateAggregateTest::class, 'nullableListRelationProvider')]
+    public function testHydrateAggregateNullListRelationReadsLikeTwin(object $prototype): void
+    {
+        $twin = clone $prototype;
+        $this->hydration->hydrateAggregate($twin, ['name' => 'Order 1']);
+        $probe = clone $prototype;
+        $this->hydration->hydrateAggregate(
+            $probe,
+            ['name' => 'Order 1', 'items' => [['product_name' => 'A', 'quantity' => 1, 'price' => 1.5]]]
+        );
+        $aggregate = clone $prototype;
+
+        $this->hydration->hydrateAggregate($aggregate, ['name' => 'Order 1', 'items' => null]);
+
+        $this->assertReadsLikeTwin($aggregate, $twin, $probe);
+    }
+
+    /**
+     * Contract B3.1-N4: setting the relation after a null delivery reports the same changes as
+     * the twin that never got the key.
+     */
+    public function testSettingRelationAfterNullDeliveryReportsChangesLikeTwin(): void
+    {
+        $base = ['id' => 1, 'identifier' => 'C-1', 'counter_number' => 'N-1'];
+        $twin = new Counter();
+        $this->hydration->hydrateAggregate($twin, $base);
+        $counter = new Counter();
+        $this->hydration->hydrateAggregate($counter, $base + ['counter_gateway' => null]);
+
+        $twin->setCounterGateway(new CounterGateway());
+        $counter->setCounterGateway(new CounterGateway());
+
+        $this->assertSame($this->hydration->getChanges($twin), $this->hydration->getChanges($counter));
+    }
+
+    /**
+     * Contract B3.1-N5: null at a column property stays in the snapshot and in toArray(), as
+     * before: scalar, date, enum, array without element class and untyped properties.
+     */
+    #[DataProvider('nullColumnProvider')]
+    public function testHydrateAggregateKeepsNullColumnInSnapshot(object $entity, string $key): void
+    {
+        $this->hydration->hydrateAggregate($entity, [$key => null]);
+
+        $this->assertSame([$key => null], $this->hydration->getSnapshot($entity));
+        $this->assertSame([$key => null], $this->hydration->toArray($entity));
+    }
+
+    /**
+     * Column properties without a setter, so null is assigned for every kind.
+     *
+     * @return array<string, array{object, string}>
+     */
+    public static function nullColumnProvider(): array
+    {
+        $columns = new class {
+            private ?int $count = 1;
+            private ?string $label = 'x';
+            private ?GatewayType $type = GatewayType::Gas;
+            private ?array $settings = ['a' => 1];
+            private $free = 'x';
+            private array $__snapshot = [];
+        };
+
+        return [
+            '?int' => [clone $columns, 'count'],
+            '?string' => [clone $columns, 'label'],
+            '?DateTimeImmutable' => [new CounterGateway(), 'active_until'],
+            '?BackedEnum' => [clone $columns, 'type'],
+            '?array without element class' => [clone $columns, 'settings'],
+            'untyped' => [clone $columns, 'free'],
+        ];
+    }
+
+    /**
+     * Asserts that an entity hydrated with a null relation key reads like its twin hydrated
+     * without the key: snapshot, toArray, aggregateToArray, getChanges, and diff against a
+     * probe whose relation is filled.
+     */
+    private function assertReadsLikeTwin(object $entity, object $twin, object $probe): void
+    {
+        $this->assertSame($this->hydration->getSnapshot($twin), $this->hydration->getSnapshot($entity));
+        $this->assertSame($this->hydration->toArray($twin), $this->hydration->toArray($entity));
+        $this->assertSame($this->hydration->aggregateToArray($twin), $this->hydration->aggregateToArray($entity));
+        $this->assertSame($this->hydration->getChanges($twin), $this->hydration->getChanges($entity));
+        $this->assertSame($this->hydration->diff($twin, $probe), $this->hydration->diff($entity, $probe));
     }
 }

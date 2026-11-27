@@ -14,7 +14,7 @@ Three focused services for entity hydration and DTO mapping in PHP: **Hydration*
 
 ## Features
 
-- **Two-Stage Hydration** — `hydrate()` for flat entities, `hydrateAggregate()` for nested aggregates with recursive object graphs
+- **Two-Stage Hydration** — `hydrate()` for flat entities, `hydrateAggregate()` for nested aggregates with recursive object graphs; in `hydrateAggregate()` a relation delivered as `null` (property typed as a class, or array property with a resolvable element class) is set to `null` and stays out of the snapshot, like a missing key
 - **Programmatic Apply** — `apply()` sets properties like `hydrate()` but preserves the snapshot — changes are detected by `getChanges()`
 - **Snapshot Merge** — `mergeSnapshot()` is the counterpart of `apply()`: it merges column values into the snapshot only (filtered and type-cast as by `hydrate()`), property values and other snapshot columns stay — e.g. to record a read basis without overwriting the entity
 - **Automatic Snapshots** — a snapshot is taken on every hydration call to establish the baseline for change detection. Snapshot keys are the original DB column names — used as source of truth for `toArray()`, `aggregateToArray()`, and `diff()`
